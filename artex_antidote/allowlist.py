@@ -29,6 +29,7 @@ from __future__ import annotations
 
 import ipaddress
 from typing import Iterable, List, Optional, Union
+from ._netutil import valid_ip
 
 __all__ = ["Allowlist", "parse_network"]
 
@@ -159,7 +160,4 @@ class Allowlist:
         text = value.strip()
         if not text:
             return None
-        try:
-            return ipaddress.ip_address(text)
-        except ValueError:
-            return None
+        return valid_ip(text)

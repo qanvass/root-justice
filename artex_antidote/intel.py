@@ -38,6 +38,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple, Union
+from ._netutil import valid_ip
 
 
 __all__ = ["ThreatIntel", "IntelSource", "_http_get"]
@@ -213,20 +214,23 @@ class ThreatIntel:
             if parsed is None:
                 continue
             token, reason = parsed
-            try:
-                if "/" in token:
+            if "/" in token:
+                try:
                     net = ipaddress.ip_network(token, strict=False)
-                    nets.append((net, name, reason))
-                else:
-                    ip = ipaddress.ip_address(token)
-                    key = ip.compressed
-                    # First source to list an IP wins its attribution.
-                    exact.setdefault(key, name)
-                    if reason:
-                        exact_reason.setdefault(key, reason)
-            except ValueError:
-                # Not a valid IP/CIDR -- skip the line, keep the feed usable.
-                continue
+                except ValueError:
+                    # Not a valid CIDR -- skip the line, keep the feed usable.
+                    continue
+                nets.append((net, name, reason))
+            else:
+                ip = valid_ip(token)
+                if ip is None:
+                    # Not a valid IP -- skip the line, keep the feed usable.
+                    continue
+                key = ip.compressed
+                # First source to list an IP wins its attribution.
+                exact.setdefault(key, name)
+                if reason:
+                    exact_reason.setdefault(key, reason)
 
     # -- lookup ------------------------------------------------------------
 
@@ -239,9 +243,8 @@ class ThreatIntel:
         among CIDR matches the most specific (longest-prefix) network wins so the
         most precise attribution is reported.
         """
-        try:
-            addr = ipaddress.ip_address(ip)
-        except ValueError:
+        addr = valid_ip(ip)
+        if addr is None:
             return None
 
         key = addr.compressed

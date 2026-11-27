@@ -14,6 +14,7 @@ from __future__ import annotations
 import ipaddress
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, List, Optional, Tuple
+from ._netutil import valid_ip
 
 
 # Confidence a given hop is the true origin, not a spoofed/relayed value.
@@ -71,13 +72,6 @@ class ResolvedOrigin:
         }
 
 
-def _valid_ip(value: str) -> Optional[ipaddress._BaseAddress]:
-    try:
-        return ipaddress.ip_address(value.strip())
-    except ValueError:
-        return None
-
-
 class TrustedProxies:
     """Allowlist of proxy IPs/CIDRs whose forwarded headers may be believed."""
 
@@ -93,7 +87,7 @@ class TrustedProxies:
                 continue
 
     def contains(self, ip: str) -> bool:
-        addr = _valid_ip(ip)
+        addr = valid_ip(ip.strip())
         if addr is None:
             return False
         return any(addr in net for net in self._networks)
@@ -104,7 +98,7 @@ def _parse_forwarded_for(headers: Dict[str, str]) -> List[Tuple[str, str]]:
     out: List[Tuple[str, str]] = []
     xff = headers.get("x-forwarded-for") or headers.get("X-Forwarded-For") or ""
     for part in xff.split(","):
-        addr = _valid_ip(part)
+        addr = valid_ip(part.strip())
         if addr is not None:
             out.append((str(addr), "x-forwarded-for"))
     return out
@@ -128,7 +122,7 @@ def resolve_origin(
     trusted = trusted or TrustedProxies()
     notes: List[str] = []
 
-    peer = _valid_ip(socket_peer_ip)
+    peer = valid_ip(socket_peer_ip.strip())
     if peer is None:
         return ResolvedOrigin(
             attributed_ip=socket_peer_ip,

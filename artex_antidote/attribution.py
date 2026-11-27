@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import ipaddress
 import json
 import os
 import re
@@ -15,6 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
+from ._netutil import is_valid_ip, valid_ip
 from .signatures import classify_vectors
 
 
@@ -51,7 +51,7 @@ def reverse_engineer_request(
     if not vectors:
         vectors.append("anomalous_probe")
 
-    ips = sorted({m for m in _IP_RE.findall(combined) if _is_valid_ip(m)})
+    ips = sorted({m for m in _IP_RE.findall(combined) if is_valid_ip(m)})
     urls = sorted(set(_URL_RE.findall(combined)))
 
     # Synthesize a Coraza/ModSecurity SecLang virtual patch rule for this exact path/vector
@@ -77,14 +77,6 @@ def reverse_engineer_request(
         coraza_seclang_rule=coraza_rule,
         python_guard_snippet=python_snippet,
     )
-
-
-def _is_valid_ip(value: str) -> bool:
-    try:
-        ipaddress.ip_address(value)
-        return True
-    except ValueError:
-        return False
 
 
 def _http_get_json(url: str, timeout: float = 4.0) -> Dict[str, Any]:
@@ -115,9 +107,8 @@ def lookup_rdap(ip: str, timeout: float = 4.0) -> Dict[str, Any]:
     rdap.org redirects to the authoritative RIR (ARIN/RIPE/APNIC/LACNIC/AFRINIC),
     so this works for any routable IP instead of only ARIN-registered space (#6).
     """
-    try:
-        addr = ipaddress.ip_address(ip)
-    except ValueError:
+    addr = valid_ip(ip)
+    if addr is None:
         return {"ip": ip, "status": "invalid_ip"}
 
     if addr.is_private or addr.is_loopback or addr.is_reserved:
@@ -149,9 +140,8 @@ def lookup_rdap(ip: str, timeout: float = 4.0) -> Dict[str, Any]:
 
 def lookup_asn(ip: str, timeout: float = 4.0) -> Dict[str, Any]:
     """Resolve the originating ASN + holder + announced prefix via RIPEstat (no key)."""
-    try:
-        addr = ipaddress.ip_address(ip)
-    except ValueError:
+    addr = valid_ip(ip)
+    if addr is None:
         return {"ip": ip, "status": "invalid_ip"}
     if addr.is_private or addr.is_loopback or addr.is_reserved:
         return {"ip": ip, "status": "non_routable_or_local"}
